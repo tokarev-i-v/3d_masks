@@ -62,13 +62,36 @@ class Program {
       height: height
     };
     this.Container = document.createElement("div");
-    this.Container.id = "container";
+    this.Container.id = "container3d";
     this.Container.style.position = "absolute";
     this.Container.style.left = "0px";
     this.Container.style.top = "0px";
+    document.body.appendChild(this.Container);
     this.Scene = new THREE.Scene();
     this.Camera = new THREE.PerspectiveCamera(45, this.SCREEN_WIDTH / this.SCREEN_HEIGHT, 0.1, 10000);
+    this.Camera.position.set(0, 0, 100);
+    this.Scene.add(this.Camera);
     this.Video = document.querySelector("#video");
+    this.Object = new THREE.Object3D();
+    // this.Scene.add(new THREE.Mesh(new THREE.SphereBufferGeometry(10, 10, 10), new THREE.MeshBasicMaterial()));
+
+    let backPlaneMat = new THREE.PointsMaterial({ color: 0xFF0000 });
+    let backPlaneGeom = new THREE.BufferGeometry();
+    let vertices = [
+      0.0, 0.0, 0.0,
+      0.0, height, 0.0,
+      width, 0.0, 0.0,
+      width, height, 0.0,
+    ];
+    backPlaneGeom.addAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    this.backPlane = new THREE.Points(backPlaneGeom, backPlaneMat);
+    this.Scene.add(this.backPlane);
+
+    // let mesh3dMat = new THREE.PointsMaterial({ color: 0x888888 });
+    // let mesh3dGeom = new THREE.BufferGeometry();
+    // mesh3dGeom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    // this.FaceMesh3D = new THREE.Points();
+
     //this.Video.autoplay = 1;
     // this.Video.width = 224;
     // this.Video.height = 224;
@@ -99,10 +122,11 @@ class Program {
     //this.imageMesh.position.set(0, 0, -1000);
 
     //this.Scene.add(this.VideoMesh);
-    this.Scene.add(this.CanvasMesh);
+    //this.Scene.add(this.CanvasMesh);
     //this.Scene.add(this.imageMesh);
     this.Renderer = new THREE.WebGLRenderer({ alpha: true, transparent: true });
     this.Renderer.setSize(this.SCREEN_WIDTH, this.SCREEN_HEIGHT);
+    this.Renderer.autoClearColor = false;
     this.Container.appendChild(this.Renderer.domElement);
     this.render = this.render.bind(this);
   }
@@ -115,7 +139,7 @@ class Program {
     //requestAnimationFrame(this.render);
   }
 }
-//let prog = new Program(VIDEO_WIDTH, VIDEO_HEIGHT);
+let prog = new Program(VIDEO_WIDTH, VIDEO_HEIGHT);
 const mobile = isMobile();
 // Don't render the point cloud on mobile in order to maximize performance and
 // to avoid crowding limited screen space.
@@ -228,7 +252,7 @@ async function renderPrediction() {
     }
 
   }
-  //prog.render();
+  prog.render();
   stats.end();
   requestAnimationFrame(renderPrediction);
 };
