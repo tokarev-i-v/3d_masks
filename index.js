@@ -24,6 +24,26 @@ import * as tfjsWasm from '@tensorflow/tfjs-backend-wasm';
 import { version } from '@tensorflow/tfjs-backend-wasm/dist/version';
 
 import { TRIANGULATION } from './triangulation';
+import { runInThisContext } from 'vm';
+
+const visibleHeightAtZDepth = (depth, camera) => {
+  // compensate for cameras not positioned at z=0
+  const cameraOffset = camera.position.z;
+  if (depth < cameraOffset) depth -= cameraOffset;
+  else depth += cameraOffset;
+
+  // vertical fov in radians
+  const vFOV = camera.fov * Math.PI / 180;
+
+  // Math.abs to ensure the result is always positive
+  return 2 * Math.tan(vFOV / 2) * Math.abs(depth);
+};
+
+const visibleWidthAtZDepth = (depth, camera) => {
+  const height = visibleHeightAtZDepth(depth, camera);
+  return height * camera.aspect;
+};
+
 
 tfjsWasm.setWasmPath(
   `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${
@@ -51,7 +71,7 @@ function drawPath(ctx, points, closePath) {
 const VIDEO_HEIGHT = window.innerHeight;
 const VIDEO_WIDTH = window.innerWidth;
 let model, ctx, videoWidth, videoHeight, video, canvas,
-  scatterGLHasInitialized = false, scatterGL;
+  scatterGLHasInitialized = false, scatterGL, flattenedPointsData = [], facePrediction = null;
 
 class Program {
   constructor(width, height) {
@@ -61,19 +81,127 @@ class Program {
       width: width,
       height: height
     };
+
     this.Container = document.createElement("div");
-    this.Container.id = "container";
+    this.Container.id = "container3d";
     this.Container.style.position = "absolute";
     this.Container.style.left = "0px";
     this.Container.style.top = "0px";
+    document.body.appendChild(this.Container);
     this.Scene = new THREE.Scene();
     this.Camera = new THREE.PerspectiveCamera(45, this.SCREEN_WIDTH / this.SCREEN_HEIGHT, 0.1, 10000);
-    this.Video = document.querySelector("video");
+    this.Camera.position.set(this.SCREEN_WIDTH / 2, this.SCREEN_HEIGHT / 2, this.SCREEN_HEIGHT / visibleHeightAtZDepth(1, this.Camera) * 1);
+    this.Scene.add(this.Camera);
+    this.Video = document.querySelector("#video");
+    this.Object = new THREE.Object3D();
+    this.HelmetScene = null;
+    this.HelmetHead = null;
+    this.HelmetHeadObject = null;
+    // this.Scene.add(new THREE.Mesh(new THREE.SphereBufferGeometry(10, 10, 10), new THREE.MeshBasicMaterial()));
+
+
+
+    let gltfloader = new THREE.GLTFLoader();
+    gltfloader.load(
+      // resource URL
+      'Mask.glb',
+      // called when the resource is loaded
+      function (gltf) {
+        gltf.scene.traverse(function (child) {
+
+          if (child.name === "Human_02") {
+            this.HelmetHead = child;
+            if (!this.HelmetHead.geometry.boundingBox) {
+              this.HelmetHead.geometry.computeBoundingBox();
+              //this.HelmetHead.material.metalness = 0;
+            }
+          }
+          if (child.name === "entity_2") {
+            this.HelmetHeadObject = child;
+            this.HelmetHeadObject.position.set(100, 100, 0);
+            for (let chd of this.HelmetHeadObject.children) {
+              chd.material.metalness = 0;
+              chd.material.side = THREE.FrontSide;
+            }
+          }
+          console.log(child);
+
+        }.bind(this));
+        this.HelmetScene = gltf.scene;
+        this.Scene.add(this.HelmetScene);
+
+      }.bind(this),
+      // called while loading is progressing
+      function (xhr) {
+
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+
+      },
+      // called when loading has errors
+      function (error) {
+
+        console.log('An error happened');
+        console.log(error);
+
+      }
+    );
+
+    // let fbxloader = new THREE.FBXLoader();
+    // fbxloader.load('Mask.fbx', function (object) {
+
+    //   //mixer = new THREE.AnimationMixer(object);
+
+    //   //var action = mixer.clipAction(object.animations[0]);
+    //   //action.play();
+
+    //   object.traverse(function (child) {
+
+    //     if (child.isMesh) {
+    //       if (child.name === "Human_02001") {
+    //         this.HelmetHead = child;
+    //         if (!this.HelmetHead.geometry.boundingBox) {
+    //           this.HelmetHead.geometry.computeBoundingBox();
+    //           this.HelmetHead.position.set(100, 100, 0);
+    //         }
+    //       }
+    //       child.castShadow = true;
+    //       child.receiveShadow = true;
+
+    //     }
+
+    //   });
+
+    //   this.Scene.add(object);
+
+    // });
+
+    let backPlaneMat = new THREE.PointsMaterial({ color: 0xFF0000 });
+    let backPlaneGeom = new THREE.BufferGeometry();
+    let vertices = [
+      0.0, 0.0, 0.0,
+      0.0, height, 0.0,
+      width, 0.0, 0.0,
+      width, height, 0.0,
+    ];
+    backPlaneGeom.addAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    this.backPlane = new THREE.Points(backPlaneGeom, backPlaneMat);
+    this.Scene.add(this.backPlane);
+
+    // let mesh3dMat = new THREE.PointsMaterial({ color: 0x888888 });
+    // let mesh3dGeom = new THREE.BufferGeometry();
+    // mesh3dGeom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    // this.FaceMesh3D = new THREE.Points();
+
     //this.Video.autoplay = 1;
     // this.Video.width = 224;
     // this.Video.height = 224;
 
-    this.ctx = document.querySelector("#output").getContext("2d");
+    let light = new THREE.AmbientLight(0xffffff); // soft white light
+    this.Scene.add(light);
+
+    this.ctx1 = document.querySelector("#output").getContext("2d");
+    this.facecanvas = document.createElement("canvas");
+    this.ctx = this.facecanvas.getContext("2d");
     this.ctx.canvas.width = this.meshes_parameters.width;
     this.ctx.canvas.height = this.meshes_parameters.height;
     this.ctx.fillStyle = "#FFF";
@@ -86,16 +214,82 @@ class Program {
     //this.VideoTexture.magFilter = THREE.LinearFilter;
 
     //let videoMat = new THREE.MeshBasicMaterial({ map: this.VideoTexture, side: THREE.DoubleSide });
-    let canvasMat = new THREE.MeshBasicMaterial({ map: this.CanvasTexture, side: THREE.DoubleSide });
+    //let canvasMat = new THREE.MeshBasicMaterial({ map: this.CanvasTexture, side: THREE.DoubleSide });
+    var customUniforms = {
+      texture: { value: this.CanvasTexture }
+    };
+
+    let canvasMat = new THREE.ShaderMaterial({
+      vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+      fragmentShader: `
+      varying vec2 vUv;
+      uniform sampler2D texture;
+      uniform float width;
+      uniform float height;
+      uniform float cp_x;
+      uniform float cp_y;
+      const float colorspeed = 50.;
+
+      vec3 hsv(vec3 c) {
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+      // vec2 centerPoint(float height, float width){
+      //   vec2 ra = vec2(width/2.0, height/2.0);
+      //   return ra;
+      // }
+      // float getCoeff(vec2 cp){
+      //   if (glFragCoord.x < 200.0){
+      //       return 0.0;
+      //   }
+      //   return 1.0;// - distance(cp, gl_FragCoord.xy)/10.0;
+      // }
+      void main() {
+        //vec2 cp = centerPoint(width, height);
+        //float dist_coef = getCoeff(cp);
+        //gl_FragColor = texture2D( texture, vUv );
+        //gl_FragColor.r = dist_coef;
+        float dist = distance(gl_FragCoord.xy, vec2(cp_x, cp_y));
+        if (dist < 100.0){
+          gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        } else {
+          gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+        }
+        //gl_FragColor = vec4(1.0, 0.0, 0.0, 0.5);
+      }`,
+      uniforms: {
+        texture: { value: this.CanvasTexture },
+        width: { value: 0 },
+        height: { value: 0 },
+        cp_x: { value: 0 },
+        cp_y: { value: 0 }
+      }
+    });
+
+
+    // canvasMat.blending = THREE.CustomBlending;
+    // canvasMat.blendEquation = THREE.SubtractEquation; //default
+    // canvasMat.blendSrc = THREE.OneFactor; //default
+    // canvasMat.blendDst = THREE.OneFactor; //default
+    // canvasMat.needsUpdate = true;
+
     //let imageCanvasMat = new THREE.MeshBasicMaterial({ map: this.imageCanvasTexture, side: THREE.DoubleSide });
 
 
     //this.VideoMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(this.meshes_parameters.width, this.meshes_parameters.height), videoMat);
-    this.CanvasMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(this.meshes_parameters.width, this.meshes_parameters.height), canvasMat);
+    this.CanvasMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(1, 1), canvasMat);
+    // this.CanvasMesh.scale.set(this.meshes_parameters.width, this.meshes_parameters.height, 1)
     //this.imageMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(100, 100), imageCanvasMat);
 
     //this.VideoMesh.position.set(0, 0, -1000);
-    this.CanvasMesh.position.set(0, 0, -999.99);
+    //this.CanvasMesh.position.set(0, 0,);
     //this.imageMesh.position.set(0, 0, -1000);
 
     //this.Scene.add(this.VideoMesh);
@@ -103,14 +297,74 @@ class Program {
     //this.Scene.add(this.imageMesh);
     this.Renderer = new THREE.WebGLRenderer({ alpha: true, transparent: true });
     this.Renderer.setSize(this.SCREEN_WIDTH, this.SCREEN_HEIGHT);
+    this.Renderer.autoClearColor = false;
     this.Container.appendChild(this.Renderer.domElement);
     this.render = this.render.bind(this);
+
+    this.mesh3dMat = new THREE.PointsMaterial({ color: 0xFF0000, size: 10 });
+    this.mesh3dGeom = new THREE.BufferGeometry();
+    this.mesh3dGeom.addAttribute('position', new THREE.Float32BufferAttribute([], 3));
+    this.FaceMesh3D = new THREE.Points(this.mesh3dGeom, this.mesh3dMat);
+    this.Scene.add(this.FaceMesh3D);
+  }
+
+  renderFacePoints(coords) {
+    let flat = coords.flat();
+    // let points = [];
+    // for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+    //   points = [
+    //     TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+    //     TRIANGULATION[i * 3 + 2]
+    //   ].map(index => coords[index]);
+    // }
+    // this.mesh3dGeom.setIndex(points);
+    this.mesh3dGeom.addAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+    this.mesh3dGeom.attributes.position.needsUpdate = true;
+  }
+
+  renderFaceTexture(faceprediction) {
+    let width = faceprediction.boundingBox.bottomRight[0][0] - faceprediction.boundingBox.topLeft[0][0];
+    let height = faceprediction.boundingBox.bottomRight[0][1] - faceprediction.boundingBox.topLeft[0][1];
+    this.ctx.canvas.width = width;
+    this.ctx.canvas.height = height;
+    this.CanvasMesh.scale.set(width, height, 1)
+    this.CanvasMesh.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height / 2), 0)
+    //this.ctx.fillStyle = "#FFF";
+    // this.CanvasMesh.geometry.parameters.width = width;
+    // this.CanvasMesh.geometry.parameters.height = height;
+    this.ctx.drawImage(this.ctx1.canvas, faceprediction.boundingBox.topLeft[0][0], faceprediction.boundingBox.topLeft[0][1], width, height, 0, 0, width, height);
+    this.CanvasMesh.material.uniforms.width.value = width;
+    this.CanvasMesh.material.uniforms.height.value = height;
+    this.CanvasMesh.material.uniforms.cp_x.value = faceprediction.boundingBox.topLeft[0][0] + width / 2;
+    this.CanvasMesh.material.uniforms.cp_y.value = this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height / 2);
+    // this.ctx.beginPath();
+    // this.ctx.arc(50, 50, 50, 0, 2 * Math.PI, false);
+    // this.ctx.clip();
+    //this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+
+  }
+  renderHelmetHead(faceprediction) {
+    this.HelmetHead.geometry.computeBoundingBox();
+    let width = faceprediction.boundingBox.bottomRight[0][0] - faceprediction.boundingBox.topLeft[0][0];
+    let height = faceprediction.boundingBox.bottomRight[0][1] - faceprediction.boundingBox.topLeft[0][1];
+
+    let head_width = this.HelmetHead.geometry.boundingBox.max.x - this.HelmetHead.geometry.boundingBox.min.x;
+    let head_height = this.HelmetHead.geometry.boundingBox.max.y - this.HelmetHead.geometry.boundingBox.min.y;
+    let val = width / head_width / 5;
+    this.HelmetHeadObject.scale.set(val, val, val);
+    this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height + 200), 0)
+
   }
   render(coords) {
     //this.imageCanvasTexture.needsUpdate = true;
     this.CanvasTexture.needsUpdate = true;
     // this.imageMesh.position.x = coords.x;
     // this.imageMesh.position.y = coords.y;
+    //this.renderFacePoints(flattenedPointsData);
+    if (facePrediction && this.HelmetHead) {
+      this.renderFaceTexture(facePrediction);
+      this.renderHelmetHead(facePrediction);
+    }
     this.Renderer.render(this.Scene, this.Camera);
     //requestAnimationFrame(this.render);
   }
@@ -179,55 +433,53 @@ async function setupCamera() {
 async function renderPrediction() {
   stats.begin();
 
-  const predictions = await model.estimateFaces(video);
-  ctx.drawImage(
-    video, 0, 0, videoWidth, videoHeight, 0, 0, canvas.width, canvas.height);
+  const predictions = await model.estimateFaces(canvas);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   if (predictions.length > 0) {
+    facePrediction = predictions[0];
     predictions.forEach(prediction => {
       const keypoints = prediction.scaledMesh;
 
-      if (state.triangulateMesh) {
-        for (let i = 0; i < TRIANGULATION.length / 3; i++) {
-          const points = [
-            TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
-            TRIANGULATION[i * 3 + 2]
-          ].map(index => keypoints[index]);
+      // if (state.triangulateMesh) {
+      //   for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+      //     const points = [
+      //       TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+      //       TRIANGULATION[i * 3 + 2]
+      //     ].map(index => keypoints[index]);
 
-          drawPath(ctx, points, true);
-        }
-      } else {
-        for (let i = 0; i < keypoints.length; i++) {
-          const x = keypoints[i][0];
-          const y = keypoints[i][1];
+      //     drawPath(ctx, points, true);
+      //   }
+      // } else {
+      //   for (let i = 0; i < keypoints.length; i++) {
+      //     const x = keypoints[i][0];
+      //     const y = keypoints[i][1];
 
-          ctx.beginPath();
-          ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-      }
+      //     ctx.beginPath();
+      //     ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
+      //     ctx.fill();
+      //   }
+      // }
     });
 
     if (renderPointcloud && state.renderPointcloud && scatterGL != null) {
       const pointsData = predictions.map(prediction => {
         let scaledMesh = prediction.scaledMesh;
-        return scaledMesh.map(point => ([-point[0], -point[1], -point[2]]));
+        return scaledMesh.map(point => ([point[0], -point[1] + VIDEO_HEIGHT, -point[2]]));
       });
+      //const pointsData = predictions[0].scaledMesh;
 
-      let flattenedPointsData = [];
+      flattenedPointsData = [];
       for (let i = 0; i < pointsData.length; i++) {
         flattenedPointsData = flattenedPointsData.concat(pointsData[i]);
       }
       const dataset = new ScatterGL.Dataset(flattenedPointsData);
 
-      if (!scatterGLHasInitialized) {
-        scatterGL.render(dataset);
-      } else {
-        scatterGL.updateDataset(dataset);
-      }
       scatterGLHasInitialized = true;
     }
 
+  } else {
+    facePrediction = null;
   }
   prog.render();
   stats.end();
@@ -244,16 +496,20 @@ async function main() {
   await setupCamera();
   video.play();
 
-  video.width = VIDEO_WIDTH;
-  video.height = VIDEO_HEIGHT;
-  video.videoWidth = VIDEO_WIDTH;
-  video.videoHeight = VIDEO_HEIGHT;
+  videoWidth = video.videoWidth;
+  videoHeight = video.videoHeight;
+  video.width = videoWidth;
+  video.height = videoHeight;
+  // video.width = VIDEO_WIDTH;
+  // video.height = VIDEO_HEIGHT;
+  // video.style.width = VIDEO_WIDTH + "px";
+  // video.style.height = VIDEO_HEIGHT + "px";
 
   canvas = document.getElementById('output');
-  canvas.width = videoWidth;
-  canvas.height = videoHeight;
+  canvas.width = VIDEO_WIDTH;
+  canvas.height = VIDEO_HEIGHT;
   const canvasContainer = document.querySelector('.canvas-wrapper');
-  canvasContainer.style = `width: ${videoWidth}px; height: ${videoHeight}px`;
+  canvasContainer.style = `width: ${VIDEO_WIDTH}px; height: ${VIDEO_HEIGHT}px`;
 
   ctx = canvas.getContext('2d');
   ctx.translate(canvas.width, 0);
