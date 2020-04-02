@@ -118,10 +118,17 @@ class Program {
           }
           if (child.name === "entity_2") {
             this.HelmetHeadObject = child;
+            var light = new THREE.DirectionalLight(0xffffff, 5, 100);
+            light.position.set(-100, 50, -50);
+            this.Scene.add(light);
+            light = new THREE.DirectionalLight(0xffffff, 5, 100);
+            light.position.set(50, 50, 50);
+            this.Scene.add(light);
             this.HelmetHeadObject.position.set(100, 100, 0);
             for (let chd of this.HelmetHeadObject.children) {
-              chd.material.metalness = 0;
-              chd.material.side = THREE.FrontSide;
+              chd.material.metalness = 1.0;
+              chd.material.roughness = 0.39;
+              // chd.material.side = THREE.FrontSide;
             }
           }
           console.log(child);
@@ -257,10 +264,11 @@ class Program {
         //gl_FragColor = texture2D( texture, vUv );
         //gl_FragColor.r = dist_coef;
         float dist = distance(gl_FragCoord.xy, vec2(cp_x, cp_y));
-        if (dist < 100.0){
-          gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        gl_FragColor = texture2D(texture, vUv);
+        if (dist < height/2.5){
+
         } else {
-          gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+          gl_FragColor.a = 0.0;
         }
         //gl_FragColor = vec4(1.0, 0.0, 0.0, 0.5);
       }`,
@@ -270,7 +278,8 @@ class Program {
         height: { value: 0 },
         cp_x: { value: 0 },
         cp_y: { value: 0 }
-      }
+      },
+      transparent: true
     });
 
 
@@ -352,8 +361,11 @@ class Program {
     let head_height = this.HelmetHead.geometry.boundingBox.max.y - this.HelmetHead.geometry.boundingBox.min.y;
     let val = width / head_width / 5;
     this.HelmetHeadObject.scale.set(val, val, val);
-    this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height + 200), 0)
-
+    this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height * 0.75), 0);
+    let annot = new THREE.Vector3(faceprediction.annotations.noseTip[0][0], faceprediction.annotations.noseTip[0][1] + 500, -faceprediction.annotations.noseTip[0][2]);
+    //annot.add(this.HelmetHeadObject.position);
+    this.HelmetHeadObject.children[1].position.set(0, 0, 0);
+    this.HelmetHeadObject.children[1].lookAt(annot);
   }
   render(coords) {
     //this.imageCanvasTexture.needsUpdate = true;
@@ -438,29 +450,29 @@ async function renderPrediction() {
 
   if (predictions.length > 0) {
     facePrediction = predictions[0];
-    predictions.forEach(prediction => {
-      const keypoints = prediction.scaledMesh;
+    // predictions.forEach(prediction => {
+    //   const keypoints = prediction.scaledMesh;
 
-      // if (state.triangulateMesh) {
-      //   for (let i = 0; i < TRIANGULATION.length / 3; i++) {
-      //     const points = [
-      //       TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
-      //       TRIANGULATION[i * 3 + 2]
-      //     ].map(index => keypoints[index]);
+    //   // if (state.triangulateMesh) {
+    //   //   for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+    //   //     const points = [
+    //   //       TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+    //   //       TRIANGULATION[i * 3 + 2]
+    //   //     ].map(index => keypoints[index]);
 
-      //     drawPath(ctx, points, true);
-      //   }
-      // } else {
-      //   for (let i = 0; i < keypoints.length; i++) {
-      //     const x = keypoints[i][0];
-      //     const y = keypoints[i][1];
+    //   //     drawPath(ctx, points, true);
+    //   //   }
+    //   // } else {
+    //   //   for (let i = 0; i < keypoints.length; i++) {
+    //   //     const x = keypoints[i][0];
+    //   //     const y = keypoints[i][1];
 
-      //     ctx.beginPath();
-      //     ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
-      //     ctx.fill();
-      //   }
-      // }
-    });
+    //   //     ctx.beginPath();
+    //   //     ctx.arc(x, y, 1 /* radius */, 0, 2 * Math.PI);
+    //   //     ctx.fill();
+    //   //   }
+    //   // }
+    // });
 
     if (renderPointcloud && state.renderPointcloud && scatterGL != null) {
       const pointsData = predictions.map(prediction => {
@@ -473,9 +485,9 @@ async function renderPrediction() {
       for (let i = 0; i < pointsData.length; i++) {
         flattenedPointsData = flattenedPointsData.concat(pointsData[i]);
       }
-      const dataset = new ScatterGL.Dataset(flattenedPointsData);
+      //const dataset = new ScatterGL.Dataset(flattenedPointsData);
 
-      scatterGLHasInitialized = true;
+      //scatterGLHasInitialized = true;
     }
 
   } else {
@@ -521,14 +533,14 @@ async function main() {
   model = await facemesh.load({ maxFaces: state.maxFaces });
   renderPrediction();
 
-  if (renderPointcloud) {
-    document.querySelector('#scatter-gl-container').style =
-      `width: ${VIDEO_WIDTH}px; height: ${VIDEO_HEIGHT}px;`;
+  // if (renderPointcloud) {
+  //   document.querySelector('#scatter-gl-container').style =
+  //     `width: ${VIDEO_WIDTH}px; height: ${VIDEO_HEIGHT}px;`;
 
-    scatterGL = new ScatterGL(
-      document.querySelector('#scatter-gl-container'),
-      { 'rotateOnStart': false, 'selectEnabled': false });
-  }
+  //   scatterGL = new ScatterGL(
+  //     document.querySelector('#scatter-gl-container'),
+  //     { 'rotateOnStart': false, 'selectEnabled': false });
+  // }
 };
 
 main();
