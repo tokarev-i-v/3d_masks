@@ -82,6 +82,8 @@ class Program {
       height: height
     };
 
+    this.loadGLTF = this.loadGLTF.bind(this);
+
     this.Container = document.createElement("div");
     this.Container.id = "container3d";
     this.Container.style.position = "absolute";
@@ -103,108 +105,15 @@ class Program {
 
     let gltfloader = new THREE.GLTFLoader();
     gltfloader.load(
-      // resource URL
-      'Mask.glb',
-      // called when the resource is loaded
-      function (gltf) {
-        gltf.scene.traverse(function (child) {
-
-          if (child.name === "Human_02") {
-            this.HelmetHead = child;
-            if (!this.HelmetHead.geometry.boundingBox) {
-              this.HelmetHead.geometry.computeBoundingBox();
-              //this.HelmetHead.material.metalness = 0;
-            }
-          }
-          if (child.name === "entity_2") {
-            this.HelmetHeadObject = child;
-            var light = new THREE.DirectionalLight(0xffffff, 5, 100);
-            light.position.set(-100, 50, -50);
-            this.Scene.add(light);
-            light = new THREE.DirectionalLight(0xffffff, 5, 100);
-            light.position.set(50, 50, 50);
-            this.Scene.add(light);
-            this.HelmetHeadObject.position.set(100, 100, 0);
-            for (let chd of this.HelmetHeadObject.children) {
-              chd.material.metalness = 1.0;
-              chd.material.roughness = 0.39;
-              // chd.material.side = THREE.FrontSide;
-            }
-          }
-          console.log(child);
-
-        }.bind(this));
-        this.HelmetScene = gltf.scene;
-        this.Scene.add(this.HelmetScene);
-
-      }.bind(this),
-      // called while loading is progressing
+      'Orange_test.glb', this.loadGLTF,
       function (xhr) {
-
         console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-
       },
-      // called when loading has errors
       function (error) {
-
         console.log('An error happened');
         console.log(error);
-
       }
     );
-
-    // let fbxloader = new THREE.FBXLoader();
-    // fbxloader.load('Mask.fbx', function (object) {
-
-    //   //mixer = new THREE.AnimationMixer(object);
-
-    //   //var action = mixer.clipAction(object.animations[0]);
-    //   //action.play();
-
-    //   object.traverse(function (child) {
-
-    //     if (child.isMesh) {
-    //       if (child.name === "Human_02001") {
-    //         this.HelmetHead = child;
-    //         if (!this.HelmetHead.geometry.boundingBox) {
-    //           this.HelmetHead.geometry.computeBoundingBox();
-    //           this.HelmetHead.position.set(100, 100, 0);
-    //         }
-    //       }
-    //       child.castShadow = true;
-    //       child.receiveShadow = true;
-
-    //     }
-
-    //   });
-
-    //   this.Scene.add(object);
-
-    // });
-
-    let backPlaneMat = new THREE.PointsMaterial({ color: 0xFF0000 });
-    let backPlaneGeom = new THREE.BufferGeometry();
-    let vertices = [
-      0.0, 0.0, 0.0,
-      0.0, height, 0.0,
-      width, 0.0, 0.0,
-      width, height, 0.0,
-    ];
-    backPlaneGeom.addAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    this.backPlane = new THREE.Points(backPlaneGeom, backPlaneMat);
-    this.Scene.add(this.backPlane);
-
-    // let mesh3dMat = new THREE.PointsMaterial({ color: 0x888888 });
-    // let mesh3dGeom = new THREE.BufferGeometry();
-    // mesh3dGeom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    // this.FaceMesh3D = new THREE.Points();
-
-    //this.Video.autoplay = 1;
-    // this.Video.width = 224;
-    // this.Video.height = 224;
-
-    let light = new THREE.AmbientLight(0xffffff); // soft white light
-    this.Scene.add(light);
 
     this.ctx1 = document.querySelector("#output").getContext("2d");
     this.facecanvas = document.createElement("canvas");
@@ -214,17 +123,11 @@ class Program {
     this.ctx.fillStyle = "#FFF";
     this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
 
-    //this.VideoTexture = new THREE.VideoTexture(this.Video);
-    this.CanvasTexture = new THREE.CanvasTexture(this.ctx.canvas);
-    //this.imageCanvasTexture = new THREE.CanvasTexture(this.ctx.canvas);
-    //this.VideoTexture.minFilter = THREE.LinearFilter;
-    //this.VideoTexture.magFilter = THREE.LinearFilter;
+    this.Helpinfo = {
+      "initialEyesDistance": 0
+    }
 
-    //let videoMat = new THREE.MeshBasicMaterial({ map: this.VideoTexture, side: THREE.DoubleSide });
-    //let canvasMat = new THREE.MeshBasicMaterial({ map: this.CanvasTexture, side: THREE.DoubleSide });
-    var customUniforms = {
-      texture: { value: this.CanvasTexture }
-    };
+    this.CanvasTexture = new THREE.CanvasTexture(this.ctx.canvas);
 
     let canvasMat = new THREE.ShaderMaterial({
       vertexShader: `
@@ -282,28 +185,8 @@ class Program {
       transparent: true
     });
 
-
-    // canvasMat.blending = THREE.CustomBlending;
-    // canvasMat.blendEquation = THREE.SubtractEquation; //default
-    // canvasMat.blendSrc = THREE.OneFactor; //default
-    // canvasMat.blendDst = THREE.OneFactor; //default
-    // canvasMat.needsUpdate = true;
-
-    //let imageCanvasMat = new THREE.MeshBasicMaterial({ map: this.imageCanvasTexture, side: THREE.DoubleSide });
-
-
-    //this.VideoMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(this.meshes_parameters.width, this.meshes_parameters.height), videoMat);
     this.CanvasMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(1, 1), canvasMat);
-    // this.CanvasMesh.scale.set(this.meshes_parameters.width, this.meshes_parameters.height, 1)
-    //this.imageMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(100, 100), imageCanvasMat);
-
-    //this.VideoMesh.position.set(0, 0, -1000);
-    //this.CanvasMesh.position.set(0, 0,);
-    //this.imageMesh.position.set(0, 0, -1000);
-
-    //this.Scene.add(this.VideoMesh);
     this.Scene.add(this.CanvasMesh);
-    //this.Scene.add(this.imageMesh);
     this.Renderer = new THREE.WebGLRenderer({ alpha: true, transparent: true });
     this.Renderer.setSize(this.SCREEN_WIDTH, this.SCREEN_HEIGHT);
     this.Renderer.autoClearColor = false;
@@ -315,7 +198,47 @@ class Program {
     this.mesh3dGeom.addAttribute('position', new THREE.Float32BufferAttribute([], 3));
     this.FaceMesh3D = new THREE.Points(this.mesh3dGeom, this.mesh3dMat);
     this.Scene.add(this.FaceMesh3D);
+    this.createInfo();
   }
+
+
+  // called when the resource is loaded
+  loadGLTF(gltf) {
+    gltf.scene.traverse(function (child) {
+
+      if (child.name === "Human_02002") {
+        this.HelmetHead = child;
+        if (!this.HelmetHead.geometry.boundingBox) {
+          this.HelmetHead.geometry.computeBoundingBox();
+          //this.HelmetHead.material.metalness = 0;
+        }
+      }
+      if (child.name === "entity_2") {
+        this.HelmetHeadObject = child;
+        var light = new THREE.DirectionalLight(0xffffff, 5, 100);
+        light.position.set(-100, 50, -50);
+        this.Scene.add(light);
+        light = new THREE.DirectionalLight(0xffffff, 5, 100);
+        light.position.set(50, 50, 50);
+        this.Scene.add(light);
+        this.HelmetHeadObject.position.set(100, 100, 0);
+        for (let chd of this.HelmetHeadObject.children) {
+          chd.material.metalness = 1.0;
+          chd.material.roughness = 0.39;
+          // chd.material.side = THREE.FrontSide;
+        }
+        let leftEyeVector = this.HelmetHeadObject.children[0].getWorldPosition();
+        let rightEyeVector = this.HelmetHeadObject.children[1].getWorldPosition();
+        this.Helpinfo.initialEyesDistance = leftEyeVector.distanceTo(rightEyeVector);
+      }
+      console.log(child);
+
+    }.bind(this));
+    this.HelmetScene = gltf.scene;
+    this.Scene.add(this.HelmetScene);
+
+  }
+
 
   renderFacePoints(coords) {
     let flat = coords.flat();
@@ -352,6 +275,20 @@ class Program {
     //this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
 
   }
+
+  createInfo() {
+    this.info = document.createElement("div");
+    document.body.appendChild(this.info);
+    this.info.style.position = "absolute";
+    this.info.style.left = "200px";
+    this.info.style.top = "20px";
+    this.info.style.color = "white";
+    this.info.innerText = "HELLO";
+  }
+  updateInfo() {
+    this.info.innerText = JSON.stringify(this.HelmetHeadObject.children[0].getWorldPosition()) + " " + JSON.stringify(this.HelmetHeadObject.children[1].getWorldPosition());
+  }
+
   renderHelmetHead(faceprediction) {
     this.HelmetHead.geometry.computeBoundingBox();
     let width = faceprediction.boundingBox.bottomRight[0][0] - faceprediction.boundingBox.topLeft[0][0];
@@ -359,13 +296,33 @@ class Program {
 
     let head_width = this.HelmetHead.geometry.boundingBox.max.x - this.HelmetHead.geometry.boundingBox.min.x;
     let head_height = this.HelmetHead.geometry.boundingBox.max.y - this.HelmetHead.geometry.boundingBox.min.y;
-    let val = width / head_width / 5;
+    let val = width / head_width / 100;
+
+    let rightEye = new THREE.Vector3(faceprediction.annotations.rightEyeUpper0[0][0], faceprediction.annotations.rightEyeUpper0[0][1], faceprediction.annotations.rightEyeUpper0[0][2]);
+    let leftEye = new THREE.Vector3(faceprediction.annotations.leftEyeUpper0[0][0], faceprediction.annotations.leftEyeUpper0[0][1], faceprediction.annotations.leftEyeUpper0[0][2]);
+    let eyedist = rightEye.distanceTo(leftEye);
+    val = eyedist / this.Helpinfo.initialEyesDistance;
     this.HelmetHeadObject.scale.set(val, val, val);
+    //this.HelmetHeadObject.scale.set(1, 1, 1);
     this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height * 0.75), 0);
-    let annot = new THREE.Vector3(faceprediction.annotations.noseTip[0][0], faceprediction.annotations.noseTip[0][1] + 500, -faceprediction.annotations.noseTip[0][2]);
-    //annot.add(this.HelmetHeadObject.position);
-    this.HelmetHeadObject.children[1].position.set(0, 0, 0);
-    this.HelmetHeadObject.children[1].lookAt(annot);
+    this.HelmetHeadObject.position.copy(leftEye);
+    //this.HelmetHeadObject.position.z = 0;
+
+
+    rightEye.add(this.HelmetHeadObject.children[1].position.clone().multiplyScalar(val));
+    this.HelmetHeadObject.position.set(rightEye.x + width / 2, this.SCREEN_HEIGHT - rightEye.y, 0);
+    // let cloned_vec = this.HelmetHeadObject.children[0].position.clone().multiplyScalar(val);
+
+    // this.HelmetHeadObject.position.add();
+    //this.HelmetHeadObject.children[0].position.copy(leftEye);
+    let annot = new THREE.Vector3(faceprediction.annotations.noseTip[0][0], faceprediction.annotations.noseTip[0][1], faceprediction.annotations.noseTip[0][2]);
+    this.HelmetHeadObject.lookAt(annot);
+    // let targvec = new THREE.Vector3();
+    // targvec.copy(this.HelmetHeadObject.position).add(annot);
+    // //annot.add(this.HelmetHeadObject.position);
+    // //this.HelmetHeadObject.children[0].position.set(0, 0, 0);
+    // this.HelmetHeadObject.lookAt(targvec);
+    this.updateInfo();
   }
   render(coords) {
     //this.imageCanvasTexture.needsUpdate = true;
