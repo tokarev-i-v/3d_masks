@@ -105,7 +105,7 @@ class Program {
 
     let gltfloader = new THREE.GLTFLoader();
     gltfloader.load(
-      'Orange_test.glb', this.loadGLTF,
+      'Orange_test_centered.glb', this.loadGLTF,
       function (xhr) {
         console.log((xhr.loaded / xhr.total * 100) + '% loaded');
       },
@@ -213,6 +213,12 @@ class Program {
           //this.HelmetHead.material.metalness = 0;
         }
       }
+
+      if ((child.name !== "Human_02002") && (child instanceof THREE.Mesh)) {
+        child.material.transparent = true;
+        child.material.opacity = 0;
+
+      }
       if (child.name === "entity_2") {
         this.HelmetHeadObject = child;
         var light = new THREE.DirectionalLight(0xffffff, 5, 100);
@@ -294,34 +300,44 @@ class Program {
     let width = faceprediction.boundingBox.bottomRight[0][0] - faceprediction.boundingBox.topLeft[0][0];
     let height = faceprediction.boundingBox.bottomRight[0][1] - faceprediction.boundingBox.topLeft[0][1];
 
-    let head_width = this.HelmetHead.geometry.boundingBox.max.x - this.HelmetHead.geometry.boundingBox.min.x;
-    let head_height = this.HelmetHead.geometry.boundingBox.max.y - this.HelmetHead.geometry.boundingBox.min.y;
-    let val = width / head_width / 100;
+    //let head_width = this.HelmetHead.geometry.boundingBox.max.x - this.HelmetHead.geometry.boundingBox.min.x;
+    // let head_height = this.HelmetHead.geometry.boundingBox.max.y - this.HelmetHead.geometry.boundingBox.min.y;
+    // let val = width / head_width / 100;
 
     let rightEye = new THREE.Vector3(faceprediction.annotations.rightEyeUpper0[0][0], faceprediction.annotations.rightEyeUpper0[0][1], faceprediction.annotations.rightEyeUpper0[0][2]);
     let leftEye = new THREE.Vector3(faceprediction.annotations.leftEyeUpper0[0][0], faceprediction.annotations.leftEyeUpper0[0][1], faceprediction.annotations.leftEyeUpper0[0][2]);
     let eyedist = rightEye.distanceTo(leftEye);
-    val = eyedist / this.Helpinfo.initialEyesDistance;
+    let val = eyedist / this.Helpinfo.initialEyesDistance * 0.8;
     this.HelmetHeadObject.scale.set(val, val, val);
+    let imagecenter = new THREE.Vector3(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height / 2), 0);
     //this.HelmetHeadObject.scale.set(1, 1, 1);
-    this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height * 0.75), 0);
-    this.HelmetHeadObject.position.copy(leftEye);
+    // this.HelmetHeadObject.position.set(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height * 0.75), 0);
+    // this.HelmetHeadObject.position.copy(leftEye);
     //this.HelmetHeadObject.position.z = 0;
 
 
     rightEye.add(this.HelmetHeadObject.children[1].position.clone().multiplyScalar(val));
-    this.HelmetHeadObject.position.set(rightEye.x + width / 2, this.SCREEN_HEIGHT - rightEye.y, 0);
+    this.HelmetHeadObject.position.set(rightEye.x + width / 2 * 0.8, this.SCREEN_HEIGHT - rightEye.y, 0);
     // let cloned_vec = this.HelmetHeadObject.children[0].position.clone().multiplyScalar(val);
 
     // this.HelmetHeadObject.position.add();
     //this.HelmetHeadObject.children[0].position.copy(leftEye);
-    let annot = new THREE.Vector3(faceprediction.annotations.noseTip[0][0], faceprediction.annotations.noseTip[0][1], faceprediction.annotations.noseTip[0][2]);
-    this.HelmetHeadObject.lookAt(annot);
+    let annot = new THREE.Vector3(faceprediction.annotations.noseTip[0][0], faceprediction.annotations.noseTip[0][1] + height, -faceprediction.annotations.noseTip[0][2]);
+    //    let pos = this.HelmetHeadObject.children[7].position.clone();
+    // this.HelmetHeadObject.children[7].position.set(0, 0, 0);
+    // annot.sub(imagecenter);
+    //annot.add(this.HelmetHeadObject.children[7].position);
+    this.HelmetHeadObject.children[7].lookAt(annot);
+    //this.HelmetHeadObject.children[7].position.copy(pos);
+    // annot.multiplyScalar(val * 100);
+    // this.HelmetHeadObject.lookAt(annot);
     // let targvec = new THREE.Vector3();
     // targvec.copy(this.HelmetHeadObject.position).add(annot);
+    // this.HelmetHeadObject.children[7].lookAt(targvec);
     // //annot.add(this.HelmetHeadObject.position);
     // //this.HelmetHeadObject.children[0].position.set(0, 0, 0);
-    // this.HelmetHeadObject.lookAt(targvec);
+    //this.HelmetHeadObject.lookAt(targvec);
+    //this.HelmetHeadObject.lookAt(annot);
     this.updateInfo();
   }
   render(coords) {
