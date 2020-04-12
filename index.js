@@ -68,8 +68,8 @@ function drawPath(ctx, points, closePath) {
   }
   ctx.stroke(region);
 }
-const VIDEO_HEIGHT = window.innerHeight;
-const VIDEO_WIDTH = window.innerWidth;
+let VIDEO_HEIGHT = window.innerHeight;
+let VIDEO_WIDTH = window.innerWidth;
 let model, ctx, videoWidth, videoHeight, video, canvas,
   scatterGLHasInitialized = false, scatterGL, flattenedPointsData = [], facePrediction = null;
 
@@ -185,6 +185,20 @@ class Program {
       transparent: true
     });
 
+
+    let path = './pisa/';
+    let format = '.png';
+    let urls = [
+      path + 'px' + format, path + 'nx' + format,
+      path + 'py' + format, path + 'ny' + format,
+      path + 'pz' + format, path + 'nz' + format
+    ];
+
+    let reflectionCube = new THREE.CubeTextureLoader().load(urls);
+    this.refractionCube = new THREE.CubeTextureLoader().load(urls);
+    this.refractionCube.mapping = THREE.CubeRefractionMapping;
+    //this.Scene.background = reflectionCube;
+
     this.CanvasMesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(1, 1), canvasMat);
     this.Scene.add(this.CanvasMesh);
     this.Renderer = new THREE.WebGLRenderer({ alpha: true, transparent: true });
@@ -210,6 +224,9 @@ class Program {
         this.HelmetHead = child;
         if (!this.HelmetHead.geometry.boundingBox) {
           this.HelmetHead.geometry.computeBoundingBox();
+          this.HelmetHead.material.envMap = this.refractionCube;
+          this.HelmetHead.material.refractionRatio = 0.7;
+          this.HelmetHead.material.roughness = 0.3;
           //this.HelmetHead.material.metalness = 0;
         }
       }
@@ -289,7 +306,7 @@ class Program {
     this.info.style.left = "200px";
     this.info.style.top = "20px";
     this.info.style.color = "white";
-    this.info.innerText = "HELLO";
+    this.info.innerText = "";
   }
   updateInfo() {
     this.info.innerText = JSON.stringify(this.HelmetHeadObject.children[0].getWorldPosition()) + " " + JSON.stringify(this.HelmetHeadObject.children[1].getWorldPosition());
@@ -307,7 +324,7 @@ class Program {
     let rightEye = new THREE.Vector3(faceprediction.annotations.rightEyeUpper0[0][0], faceprediction.annotations.rightEyeUpper0[0][1], faceprediction.annotations.rightEyeUpper0[0][2]);
     let leftEye = new THREE.Vector3(faceprediction.annotations.leftEyeUpper0[0][0], faceprediction.annotations.leftEyeUpper0[0][1], faceprediction.annotations.leftEyeUpper0[0][2]);
     let eyedist = rightEye.distanceTo(leftEye);
-    let val = eyedist / this.Helpinfo.initialEyesDistance * 0.8;
+    let val = eyedist / this.Helpinfo.initialEyesDistance * 0.75;
     this.HelmetHeadObject.scale.set(val, val, val);
     let imagecenter = new THREE.Vector3(faceprediction.boundingBox.topLeft[0][0] + width / 2, this.SCREEN_HEIGHT - (faceprediction.boundingBox.topLeft[0][1] + height / 2), 0);
     //this.HelmetHeadObject.scale.set(1, 1, 1);
@@ -338,7 +355,7 @@ class Program {
     // //this.HelmetHeadObject.children[0].position.set(0, 0, 0);
     //this.HelmetHeadObject.lookAt(targvec);
     //this.HelmetHeadObject.lookAt(annot);
-    this.updateInfo();
+    //this.updateInfo();
   }
   render(coords) {
     //this.imageCanvasTexture.needsUpdate = true;
@@ -354,7 +371,7 @@ class Program {
     //requestAnimationFrame(this.render);
   }
 }
-let prog = new Program(VIDEO_WIDTH, VIDEO_HEIGHT);
+let prog = null;
 const mobile = isMobile();
 // Don't render the point cloud on mobile in order to maximize performance and
 // to avoid crowding limited screen space.
@@ -401,12 +418,13 @@ async function setupCamera() {
       facingMode: 'user',
       // Only setting the video to a specified size in order to accommodate a
       // point cloud, so on mobile devices accept the default size.
-      width: mobile ? undefined : VIDEO_WIDTH,
-      height: mobile ? undefined : VIDEO_HEIGHT
+      // width: mobile ? undefined : VIDEO_WIDTH,
+      // height: mobile ? undefined : VIDEO_HEIGHT
     },
   });
-  video.width = VIDEO_WIDTH;
-  video.height = VIDEO_HEIGHT;
+  // VIDEO_WIDTH = video.video
+  // video.width = VIDEO_WIDTH;
+  // video.height = VIDEO_HEIGHT;
   video.srcObject = stream;
   return new Promise((resolve) => {
     video.onloadedmetadata = () => {
@@ -483,8 +501,11 @@ async function main() {
 
   videoWidth = video.videoWidth;
   videoHeight = video.videoHeight;
+  VIDEO_WIDTH = videoWidth * 2;
+  VIDEO_HEIGHT = videoHeight * 2;
   video.width = videoWidth;
   video.height = videoHeight;
+  prog = new Program(VIDEO_WIDTH, VIDEO_HEIGHT);
   // video.width = VIDEO_WIDTH;
   // video.height = VIDEO_HEIGHT;
   // video.style.width = VIDEO_WIDTH + "px";
